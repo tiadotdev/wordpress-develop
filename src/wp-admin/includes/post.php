@@ -322,7 +322,7 @@ function edit_post( $post_data = null ) {
 	foreach ( $format_meta_urls as $format_meta_url ) {
 		$keyed = '_format_' . $format_meta_url;
 		if ( isset( $post_data[ $keyed ] ) ) {
-			update_post_meta( $post_ID, $keyed, wp_slash( esc_url_raw( wp_unslash( $post_data[ $keyed ] ) ) ) );
+			update_post_meta( $post_ID, $keyed, wp_slash( sanitize_url( wp_unslash( $post_data[ $keyed ] ) ) ) );
 		}
 	}
 
@@ -597,8 +597,14 @@ function bulk_edit_posts( $post_data = null ) {
 
 		$post      = get_post( $post_ID );
 		$tax_names = get_object_taxonomies( $post );
+
 		foreach ( $tax_names as $tax_name ) {
 			$taxonomy_obj = get_taxonomy( $tax_name );
+
+			if ( ! $taxonomy_obj->show_in_quick_edit ) {
+				continue;
+			}
+
 			if ( isset( $tax_input[ $tax_name ] ) && current_user_can( $taxonomy_obj->cap->assign_terms ) ) {
 				$new_terms = $tax_input[ $tax_name ];
 			} else {
@@ -765,7 +771,7 @@ function get_default_post_to_edit( $post_type = 'post', $create_in_db = false ) 
 }
 
 /**
- * Determines if a post exists based on title, content, date and type.
+ * Determines if a post exists based on title, content, author, date and type.
  *
  * @since 2.0.0
  * @since 5.2.0 Added the `$type` parameter.
@@ -775,16 +781,18 @@ function get_default_post_to_edit( $post_type = 'post', $create_in_db = false ) 
  *
  * @param string $title   Post title.
  * @param string $content Optional. Post content.
+ * @param integer $author Optional. Post author ID.
  * @param string $date    Optional. Post date.
  * @param string $type    Optional. Post type.
  * @param string $status  Optional. Post status.
  * @return int Post ID if post exists, 0 otherwise.
  */
-function post_exists( $title, $content = '', $date = '', $type = '', $status = '' ) {
+function post_exists( $title, $content = '', $author = '', $date = '', $type = '', $status = '' ) {
 	global $wpdb;
 
 	$post_title   = wp_unslash( sanitize_post_field( 'post_title', $title, 0, 'db' ) );
 	$post_content = wp_unslash( sanitize_post_field( 'post_content', $content, 0, 'db' ) );
+	$post_author = wp_unslash( sanitize_post_field( 'post_author', $author, 0, 'db' ) );
 	$post_date    = wp_unslash( sanitize_post_field( 'post_date', $date, 0, 'db' ) );
 	$post_type    = wp_unslash( sanitize_post_field( 'post_type', $type, 0, 'db' ) );
 	$post_status  = wp_unslash( sanitize_post_field( 'post_status', $status, 0, 'db' ) );
@@ -805,6 +813,11 @@ function post_exists( $title, $content = '', $date = '', $type = '', $status = '
 	if ( ! empty( $content ) ) {
 		$query .= ' AND post_content = %s';
 		$args[] = $post_content;
+	}
+	
+	if ( ! empty( $author ) ) {
+		$query .= ' AND post_author = %s';
+		$args[] = $post_author;
 	}
 
 	if ( ! empty( $type ) ) {
